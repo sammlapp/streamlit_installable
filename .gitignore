@@ -1,0 +1,12 @@
+/.DS_Store
+/BMZInferenceGUI.spec
+/MyApp.dmg
+/MyApp_temp.dmg
+/MyStreamlitApp.spec
+/OpsoGui.dmg
+/*.ckpt
+/histograms.ipynb
+/opsogui
+__pycache__/
+build/
+dist/
