@@ -97,8 +97,8 @@ def paginator(label, items, items_per_page=10, on_sidebar=True):
     # Iterate over the items in the page to let the user display them.
     min_index = st.session_state.page_number * items_per_page
     max_index = min(min_index + items_per_page, len(items))
-    page_indices = list(np.arange(min_index, max_index))
-
+    # numeric_positions = list(np.arange(min_index, max_index))
+    page_indices = items[min_index:max_index]
     if ss.page_number >= n_pages:
         ss.page_number = 0
 

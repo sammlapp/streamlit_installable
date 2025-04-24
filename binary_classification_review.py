@@ -17,7 +17,8 @@ st.set_page_config(layout="wide")
 # TODO: click img to play, instead of separate audio widget
 # TODO: comment  field for each image
 # TODO: field for multi-select of species: user picks species list file, field updates 'labels' column
-
+# TODO: summary stats
+# TODO: filter by label
 
 ss = st.session_state
 if not "annotation_df" in ss:
@@ -53,6 +54,9 @@ if not "audio_dir" in ss:
 if not "bandpass_range" in ss:
     ss.bandpass_range = [0, 10000]
 
+if not "spec_window_size" in ss:
+    ss.spec_window_size = 512  # samples
+
 if not "use_bandpass" in ss:
     ss.use_bandpass = None
 
@@ -69,6 +73,9 @@ if "image_height" not in ss:
 if "resize_images" not in ss:
     ss.resize_images = False
 
+if "visible_labels" not in ss:
+    # only show clips with these annotations
+    ss.visible_labels = ["yes", "no", "unknown", None]
 
 option_map = {
     0: ":material/check_circle:",
@@ -175,7 +182,7 @@ def show_audio(file, start, end, review_buttons=False, review_id=None, active=Fa
                 format="audio/wav",
                 start_time=0,
             )
-            spec = Spectrogram.from_audio(a)
+            spec = Spectrogram.from_audio(a, window_samples=ss.spec_window_size)
             if ss.use_bandpass:
                 spec = spec.bandpass(*ss.bandpass_range)
             img = spec.to_image(range=[-80, -20], invert=True)
@@ -362,55 +369,86 @@ with st.sidebar:
     #     )
 
 
+def check_first_path():
+    # check that audio exists in expected location
+    first_audio_path = ss.annotation_df.iloc[0]["file"]
+    if ss.audio_dir is not None:
+        first_audio_path = Path(ss.audio_dir) / first_audio_path
+    return Path(first_audio_path).exists()
+
+
 if ss.annotation_df is None:
     st.write("No annotation task loaded")
-else:
-    indices_one_page = paginator(
-        "Select a page of model output scores",
-        ss.annotation_df.index,
-        items_per_page=ss.n_samples_per_page,
+elif not check_first_path():
+    st.warning(
+        f"""Click Root Audio Directory to specify the location of audio files from which relative paths are specified.
+        
+        First audio file {ss.annotation_df.iloc[0]['file']} was not found relative to Root Audio Directory ({ss.audio_dir}). 
+        
+        Examples:
+        
+        If the first audio file in the annotation table is 'audio/clip1.wav', and 'audio' is a subdirectory in '/home/user/annotation_project',
+        then set the Root Audio Directory to '/home/user/annotation_project'. 
+        
+        If the audio files are given just as the file path, eg `clip1.wav`, the 
+        Root Audio Directory should be set to the directory where the audio files are located, eg `/home/user/annotation_project/audio`.
+        
+        If the audio files in the annotation table are absolute paths (eg /home/user/annotation_project/audio/clip1.wav`), use the `Clear` button to set the Root Audio Directory to None.
+        """
     )
-    if not ss["active_idx"] in indices_one_page:
-        ss["active_idx"] = indices_one_page[0]
+else:
+    filtered_annotation_df = ss.annotation_df[
+        ss.annotation_df["annotation"].isin(ss.visible_labels)
+    ]
 
-    # with st.sidebar:
-    #     ss["active_idx"]
-
-    # apply label to entire page
-    cols = st.columns(2)
-    with cols[0]:
-        st.subheader("Annotation")
-    with cols[1]:
-        st.segmented_control(
-            "Annotation: apply to all on this page",
-            options=option_map_w_none.keys(),
-            format_func=lambda option: option_map_w_none[option],
-            selection_mode="single",
-            key="full_page_annotation",
-            on_change=update_page_annotations,
-            args=(indices_one_page,),
-            default=None,
+    if len(filtered_annotation_df) == 0:
+        st.write("No annotations to display with the selected filters.")
+    else:
+        indices_one_page = paginator(
+            "Select a page of model output scores",
+            filtered_annotation_df.index,
+            items_per_page=ss.n_samples_per_page,
         )
+        if not ss["active_idx"] in indices_one_page:
+            ss["active_idx"] = indices_one_page[0]
 
-    st.divider()
+        # with st.sidebar:
+        #     ss["active_idx"]
 
-    columns = st.columns(ss.n_columns)
-    for idx in indices_one_page:
-        row_to_display = ss.annotation_df.loc[idx]
-        audio_path = row_to_display["file"]
-        if ss.audio_dir is not None:
-            audio_path = Path(ss.audio_dir) / audio_path
-        with columns[idx % ss.n_columns]:
-            start_t = row_to_display["start_time"] - ss.pre_look_time
-            show_audio(
-                audio_path,
-                start_t,
-                start_t + ss.clip_duration,
-                review_buttons=True,
-                review_id=f"review_clip_{idx}",
-                active=idx == ss["active_idx"],
+        # apply label to entire page
+        cols = st.columns(2)
+        with cols[0]:
+            st.subheader("Annotation")
+        with cols[1]:
+            st.segmented_control(
+                "Annotation: apply to all on this page",
+                options=option_map_w_none.keys(),
+                format_func=lambda option: option_map_w_none[option],
+                selection_mode="single",
+                key="full_page_annotation",
+                on_change=update_page_annotations,
+                args=(indices_one_page,),
+                default=None,
             )
-        # TODO: spec parameters, buffer time options
+
+        st.divider()
+
+        columns = st.columns(ss.n_columns)
+        for ii, idx in enumerate(indices_one_page):
+            row_to_display = ss.annotation_df.loc[idx]
+            audio_path = row_to_display["file"]
+            if ss.audio_dir is not None:
+                audio_path = Path(ss.audio_dir) / audio_path
+            with columns[ii % ss.n_columns]:
+                start_t = row_to_display["start_time"] - ss.pre_look_time
+                show_audio(
+                    audio_path,
+                    start_t,
+                    start_t + ss.clip_duration,
+                    review_buttons=True,
+                    review_id=f"review_clip_{idx}",
+                    active=idx == ss["active_idx"],
+                )
 
 # TODO: histograms of scores for selected species
 
@@ -430,6 +468,13 @@ with st.sidebar:
                 value=(0, 20000),
                 step=10,
                 disabled=not ss.use_bandpass,
+            )
+
+            ss.spec_window_size = st.number_input(
+                "Spectrogram window samples",
+                value=ss.spec_window_size,
+                min_value=16,
+                max_value=4096,
             )
 
             ss.resize_images = st.checkbox("Resize images", value=ss.resize_images)
@@ -462,3 +507,36 @@ with st.sidebar:
                 min_value=0.0,
                 max_value=60.0,
             )
+
+    with st.expander("Annotation Summary", expanded=True):
+        if ss.annotation_df is not None:
+            st.progress(
+                ss.annotation_df["annotation"].notna().sum() / len(ss.annotation_df)
+            )
+            st.write(
+                f"Annotated:",
+                ss.annotation_df["annotation"].notna().sum(),
+                "/",
+                len(ss.annotation_df),
+            )
+            text = []
+            for label in option_labels.values():
+                if label is None:
+                    continue
+                count = (ss.annotation_df["annotation"] == label).sum()
+                text.extend([label, ": ", count, " "])
+            st.write(*text)
+
+        else:
+            st.write("No annotations loaded.")
+
+    with st.expander("Filter by Annotation", expanded=True):
+        # filter by label
+        with st.form("filter_form"):
+            ss.visible_labels = st.multiselect(
+                "Visible Labels",
+                options=option_labels.values(),
+                default=ss.visible_labels,
+                help="Only show clips with these annotations",
+            )
+            st.form_submit_button("Apply Filter", type="primary")
