@@ -1,3 +1,4 @@
 streamlit-shortcuts
 streamlit
 filedialpy
+opensoundscape
