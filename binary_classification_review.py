@@ -128,6 +128,10 @@ def load_annotation_df(f=None, discard_changes=False):
         if not "annotation" in ss.annotation_df.columns:
             ss.annotation_df["annotation"] = None
 
+    # change 'nan' to None in annotation column
+    ss.annotation_df["annotation"] = ss.annotation_df["annotation"].replace(
+        {np.nan: None}
+    )
     ss.page_number = 0
     ss.labels_are_up_to_date = True
 
@@ -397,6 +401,7 @@ elif not check_first_path():
         """
     )
 else:
+    ss.annotation_df["annotation"].unique()
     filtered_annotation_df = ss.annotation_df[
         ss.annotation_df["annotation"].isin(ss.visible_labels)
     ]
