@@ -115,14 +115,23 @@ def paginator(label, items, items_per_page=10, on_sidebar=True):
             # next/previous item buttons
             button(
                 "Prev. Page",
-                "p",
+                shortcut="p",
+                key="previous_page",
                 on_click=previous_page,
                 args=(n_pages,),
                 hint=True,
             )
 
         with cols[1]:
-            button("Next Page", "n", on_click=next_page, args=(n_pages,), hint=True)
+            button(
+                "Next Page",
+                shortcut="n",
+                key="next_page",
+                on_click=next_page,
+                args=(n_pages,),
+                hint=True,
+            )
+
         # with cols[2]:
         #     button(
         #         "\<",

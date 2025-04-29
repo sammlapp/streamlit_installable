@@ -1,4 +1,4 @@
-streamlit-shortcuts
+streamlit-shortcuts @ git+https://github.com/sammlapp/streamlit-shortcuts.git@main
 streamlit
 filedialpy
 opensoundscape
