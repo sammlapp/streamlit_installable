@@ -18,6 +18,7 @@ st.set_page_config(layout="wide")
 # TODO: spacebar plays active clip!
 # TODO: comment  field for each image
 # TODO: field for multi-select of species: user picks species list file, field updates 'labels' column
+# TODO: click to select active pane (make reusable click-able element class?)
 
 ss = st.session_state
 if not "annotation_df" in ss:
@@ -188,8 +189,6 @@ def next_unlabeled_idx(idx):
 def update_annotation(review_id):
     df_idx = int(review_id.replace("review_clip_", ""))
     ss.annotation_df.at[df_idx, "annotation"] = option_labels[ss[review_id]]
-    #     ss[review_id]
-    st.success("saved annotation")
     ss.labels_are_up_to_date = False
 
 
@@ -331,10 +330,8 @@ def clear_audio_dir():
 def set_label(idx, label):
     """Set the label for the current active index."""
     ss.annotation_df.at[idx, "annotation"] = label
-    # st.success(f"set annotation for clip {idx} to {label}")
     next_unlabeled_idx(idx)  # activate next clip after updating annotation
     ss.labels_are_up_to_date = False
-    # ss["active_idx"] = idx  # update active index to ensure correct display
 
 
 with st.sidebar:
