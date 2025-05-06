@@ -404,6 +404,7 @@ def check_first_path():
     return Path(first_audio_path).exists()
 
 
+currently_annotating = False
 if ss.annotation_df is None:
     st.write("No annotation task loaded")
 elif not check_first_path():
@@ -431,7 +432,9 @@ else:
 
     if len(filtered_annotation_df) == 0:
         st.write("No annotations to display with the selected filters.")
+
     else:
+        currently_annotating = True
         ss.page_indices, n_pages = paginator(
             filtered_annotation_df.index,
             items_per_page=ss.n_samples_per_page,
@@ -460,273 +463,281 @@ else:
 
 # TODO: histograms of scores for selected species
 
-with st.sidebar:
-
-    # Display a pagination selectbox in the specified location.
-    page_format_func = lambda i: "Page %s" % i
-    st.selectbox(
-        "Page",
-        range(n_pages),
-        format_func=page_format_func,
-        key="page_number",
-    )
-    cols = st.columns(4)
-    with cols[0]:
-        # next/previous item buttons
-        button(
-            ":material/keyboard_double_arrow_left:",
-            shortcut="p",
-            key="previous_page",
-            on_click=previous_page,
-            args=(n_pages,),
-            hint=True,
-            help="Go to previous page",
-        )
-
-    with cols[1]:
-        button(
-            ":material/keyboard_double_arrow_right:",
-            shortcut="n",
-            key="next_page",
-            on_click=next_page,
-            args=(n_pages,),
-            hint=True,
-            help="Go to next page",
-        )
-
-    with cols[2]:
-        button(
-            ":material/arrow_left:",
-            shortcut="j",
-            key="previous_idx",
-            on_click=previous_idx,
-            hint=True,
-            help="Activate previous clip",
-        )
-
-    with cols[3]:
-        button(
-            ":material/arrow_right:",
-            "k",
-            key="next_idx",
-            on_click=next_idx,
-            hint=True,
-            help="Activate next clip",
-        )
-
-    with st.expander("Full-page annotations", expanded=True):
-        # add_keyboard_shortcuts({"ctrl+shift+s": "Save", "ctrl+shift+o": "Open"})
-        cols = st.columns(4)
-        with cols[0]:
-            button(
-                ":material/check_circle:`A`",
-                shortcut="shift+a",
-                hint=False,
-                key="full_page_yes",
-                on_click=update_page_annotations,
-                args=(ss.page_indices, "yes"),
-                help="Apply 'yes' annotation to all clips on this page",
-            )
-        with cols[1]:
-            button(
-                ":material/cancel:`S`",
-                "shift+s",
-                hint=False,
-                key="full_page_no",
-                on_click=update_page_annotations,
-                args=(ss.page_indices, "no"),
-                help="Apply 'no' annotation to all clips on this page",
-            )
-        with cols[2]:
-            button(
-                ":material/question_mark:`D`",
-                "shitf+d",
-                hint=False,
-                key="full_page_unknown",
-                on_click=update_page_annotations,
-                args=(ss.page_indices, "unknown"),
-                help="Apply 'unknown' annotation to all clips on this page",
-            )
-        with cols[3]:
-            button(
-                ":material/Replay:`F`",
-                "shift+f",
-                key="full_page_reset",
-                hint=False,
-                on_click=update_page_annotations,
-                args=(ss.page_indices, None),
-                help="Clear annotations for all clips on this page",
-            )
-
-        st.checkbox(
-            "Override existing annotations",
-            key="full_page_overrides",
-            value=False,
-            help="""If checked, clicking an annotation on the left will override existing annotations on this page. 
-            Otherwise, the annotation is only applied to un-labeled clips on this page.""",
-        )
-
-    with st.expander("Selected Clip annotation", expanded=True):
-        # add keyboard shortcuts for annotation
-        cols = st.columns(4)
-        with cols[0]:
-            button(
-                label=":material/check_circle:",
-                shortcut="a",
-                key="active_clip_set_yes",
-                on_click=set_label,
-                args=(ss["active_idx"], "yes"),
-                help="Annotate current selection as 'yes'",
-                hint=True,
-            )
-        with cols[1]:
-            button(
-                label=":material/cancel:",
-                shortcut="s",
-                key="active_clip_set_no",
-                on_click=set_label,
-                args=(ss["active_idx"], "no"),
-                help="Annotate current selection as 'no'",
-                hint=True,
-            )
-        with cols[2]:
-            button(
-                label=":material/question_mark:",
-                shortcut="d",
-                key="active_clip_set_unknown",
-                on_click=set_label,
-                args=(ss["active_idx"], "unknown"),
-                help="Annotate current selection as 'unknown'",
-                hint=True,
-            )
-        with cols[3]:
-            button(
-                label=":material/Replay:",
-                shortcut="f",
-                key="active_clip_reset",
-                on_click=set_label,
-                args=(ss["active_idx"], None),
-                help="Clear annotation for current selection",
-                hint=True,
-            )
-
-    with st.expander(":material/Settings: Settings", expanded=True):
-        with st.form("settings_form"):
-            st.form_submit_button("Update")
-
-            st.write("Spectrogram settings")
-            st.checkbox("Limit Spectrogram Frequency Range", key="use_bandpass")
-            st.slider(
-                "Bandpass filter range (Hz)",
-                min_value=0,
-                max_value=20000,
-                value=(0, 20000),
-                step=10,
-                # disabled=not ss.use_bandpass,
-                key="bandpass_range",
-            )
-
-            st.slider(
-                "Spectrogram dB range",
-                min_value=-120,
-                max_value=0,
-                value=(-80, -20),
-                step=1,
-                help="Set the dB range for the spectrogram display",
-                key="dB_range",
-            )
-
-            st.number_input(
-                "Spectrogram window samples",
-                value=ss.spec_window_size,
-                min_value=16,
-                max_value=4096,
-                key="spec_window_size",
-            )
-
+if currently_annotating:
+    with st.sidebar:
+        if n_pages is not None:
+            # Display a pagination selectbox in the specified location.
+            page_format_func = lambda i: "Page %s" % i
             st.selectbox(
-                "Spectrogram colormap",
-                options=["greys", "viridis", "plasma", "inferno", "magma", "cividis"],
-                index=0,  # default to 'viridis'
-                help="Select the colormap for the spectrogram",
-                key="spectrogram_colormap",
+                "Page",
+                range(n_pages),
+                format_func=page_format_func,
+                key="page_number",
+            )
+            cols = st.columns(4)
+            with cols[0]:
+                # next/previous item buttons
+                button(
+                    ":material/keyboard_double_arrow_left:",
+                    shortcut="p",
+                    key="previous_page",
+                    on_click=previous_page,
+                    args=(n_pages,),
+                    hint=True,
+                    help="Go to previous page",
+                )
+
+            with cols[1]:
+                button(
+                    ":material/keyboard_double_arrow_right:",
+                    shortcut="n",
+                    key="next_page",
+                    on_click=next_page,
+                    args=(n_pages,),
+                    hint=True,
+                    help="Go to next page",
+                )
+
+            with cols[2]:
+                button(
+                    ":material/arrow_left:",
+                    shortcut="j",
+                    key="previous_idx",
+                    on_click=previous_idx,
+                    hint=True,
+                    help="Activate previous clip",
+                )
+
+            with cols[3]:
+                button(
+                    ":material/arrow_right:",
+                    "k",
+                    key="next_idx",
+                    on_click=next_idx,
+                    hint=True,
+                    help="Activate next clip",
+                )
+
+        with st.expander("Full-page annotations", expanded=True):
+            # add_keyboard_shortcuts({"ctrl+shift+s": "Save", "ctrl+shift+o": "Open"})
+            cols = st.columns(4)
+            with cols[0]:
+                button(
+                    ":material/check_circle:`A`",
+                    shortcut="shift+a",
+                    hint=False,
+                    key="full_page_yes",
+                    on_click=update_page_annotations,
+                    args=(ss.page_indices, "yes"),
+                    help="Apply 'yes' annotation to all clips on this page",
+                )
+            with cols[1]:
+                button(
+                    ":material/cancel:`S`",
+                    "shift+s",
+                    hint=False,
+                    key="full_page_no",
+                    on_click=update_page_annotations,
+                    args=(ss.page_indices, "no"),
+                    help="Apply 'no' annotation to all clips on this page",
+                )
+            with cols[2]:
+                button(
+                    ":material/question_mark:`D`",
+                    "shitf+d",
+                    hint=False,
+                    key="full_page_unknown",
+                    on_click=update_page_annotations,
+                    args=(ss.page_indices, "unknown"),
+                    help="Apply 'unknown' annotation to all clips on this page",
+                )
+            with cols[3]:
+                button(
+                    ":material/Replay:`F`",
+                    "shift+f",
+                    key="full_page_reset",
+                    hint=False,
+                    on_click=update_page_annotations,
+                    args=(ss.page_indices, None),
+                    help="Clear annotations for all clips on this page",
+                )
+
+            st.checkbox(
+                "Override existing annotations",
+                key="full_page_overrides",
+                value=False,
+                help="""If checked, clicking an annotation on the left will override existing annotations on this page. 
+                Otherwise, the annotation is only applied to un-labeled clips on this page.""",
             )
 
-            st.checkbox("Resize images", key="resize_images")
-            st.number_input(
-                "Image width (px)",
-                min_value=10,
-                max_value=1000,
-                key="image_width",
-                value=ss.image_width,
-            )
-            st.number_input(
-                "Image height (px)",
-                value=ss.image_height,
-                min_value=10,
-                max_value=1000,
-                key="image_height",
-            )
+        with st.expander("Selected Clip annotation", expanded=True):
+            # add keyboard shortcuts for annotation
+            cols = st.columns(4)
+            with cols[0]:
+                button(
+                    label=":material/check_circle:",
+                    shortcut="a",
+                    key="active_clip_set_yes",
+                    on_click=set_label,
+                    args=(ss["active_idx"], "yes"),
+                    help="Annotate current selection as 'yes'",
+                    hint=True,
+                )
+            with cols[1]:
+                button(
+                    label=":material/cancel:",
+                    shortcut="s",
+                    key="active_clip_set_no",
+                    on_click=set_label,
+                    args=(ss["active_idx"], "no"),
+                    help="Annotate current selection as 'no'",
+                    hint=True,
+                )
+            with cols[2]:
+                button(
+                    label=":material/question_mark:",
+                    shortcut="d",
+                    key="active_clip_set_unknown",
+                    on_click=set_label,
+                    args=(ss["active_idx"], "unknown"),
+                    help="Annotate current selection as 'unknown'",
+                    hint=True,
+                )
+            with cols[3]:
+                button(
+                    label=":material/Replay:",
+                    shortcut="f",
+                    key="active_clip_reset",
+                    on_click=set_label,
+                    args=(ss["active_idx"], None),
+                    help="Clear annotation for current selection",
+                    hint=True,
+                )
 
-            st.write("Display settings")
-            st.number_input(
-                "number of columns",
-                key="n_columns",
-                min_value=1,
-                max_value=20,
-                value=ss.n_columns,
-            )
-            st.number_input(
-                "number of samples per page",
-                value=ss.n_samples_per_page,
-                min_value=1,
-                max_value=100,
-                key="n_samples_per_page",
-            )
-            st.number_input(
-                "Audio clip duration (seconds)",
-                value=float(ss.clip_duration),
-                min_value=0.1,
-                max_value=60.0,
-                key="clip_duration",
-            )
-            st.number_input(
-                "Pre-look time (seconds)",
-                value=float(ss.pre_look_time),
-                min_value=0.0,
-                max_value=60.0,
-                key="pre_look_time",
-            )
+        with st.expander(":material/Settings: Settings", expanded=True):
+            with st.form("settings_form"):
+                st.form_submit_button("Update")
 
-    with st.expander("Annotation Summary", expanded=True):
-        if ss.annotation_df is not None:
-            st.progress(
-                ss.annotation_df["annotation"].notna().sum() / len(ss.annotation_df)
-            )
-            st.write(
-                f"Annotated:",
-                ss.annotation_df["annotation"].notna().sum(),
-                "/",
-                len(ss.annotation_df),
-            )
-            text = []
-            for label in option_labels.values():
-                if label is None:
-                    continue
-                count = (ss.annotation_df["annotation"] == label).sum()
-                text.extend([label, ": ", count, " "])
-            st.write(*text)
+                st.write("Spectrogram settings")
+                st.checkbox("Limit Spectrogram Frequency Range", key="use_bandpass")
+                st.slider(
+                    "Bandpass filter range (Hz)",
+                    min_value=0,
+                    max_value=20000,
+                    value=(0, 20000),
+                    step=10,
+                    # disabled=not ss.use_bandpass,
+                    key="bandpass_range",
+                )
 
-        else:
-            st.write("No annotations loaded.")
+                st.slider(
+                    "Spectrogram dB range",
+                    min_value=-120,
+                    max_value=0,
+                    value=(-80, -20),
+                    step=1,
+                    help="Set the dB range for the spectrogram display",
+                    key="dB_range",
+                )
 
-    with st.expander("Filter by Annotation", expanded=True):
-        # filter by label
-        with st.form("filter_form"):
-            ss.visible_labels = st.multiselect(
-                "Visible Labels",
-                options=option_labels.values(),
-                default=ss.visible_labels,
-                help="Only show clips with these annotations",
-            )
-            st.form_submit_button("Apply Filter", type="primary")
+                st.number_input(
+                    "Spectrogram window samples",
+                    value=ss.spec_window_size,
+                    min_value=16,
+                    max_value=4096,
+                    key="spec_window_size",
+                )
+
+                st.selectbox(
+                    "Spectrogram colormap",
+                    options=[
+                        "greys",
+                        "viridis",
+                        "plasma",
+                        "inferno",
+                        "magma",
+                        "cividis",
+                    ],
+                    index=0,  # default to 'viridis'
+                    help="Select the colormap for the spectrogram",
+                    key="spectrogram_colormap",
+                )
+
+                st.checkbox("Resize images", key="resize_images")
+                st.number_input(
+                    "Image width (px)",
+                    min_value=10,
+                    max_value=1000,
+                    key="image_width",
+                    value=ss.image_width,
+                )
+                st.number_input(
+                    "Image height (px)",
+                    value=ss.image_height,
+                    min_value=10,
+                    max_value=1000,
+                    key="image_height",
+                )
+
+                st.write("Display settings")
+                st.number_input(
+                    "number of columns",
+                    key="n_columns",
+                    min_value=1,
+                    max_value=20,
+                    value=ss.n_columns,
+                )
+                st.number_input(
+                    "number of samples per page",
+                    value=ss.n_samples_per_page,
+                    min_value=1,
+                    max_value=100,
+                    key="n_samples_per_page",
+                )
+                st.number_input(
+                    "Audio clip duration (seconds)",
+                    value=float(ss.clip_duration),
+                    min_value=0.1,
+                    max_value=60.0,
+                    key="clip_duration",
+                )
+                st.number_input(
+                    "Pre-look time (seconds)",
+                    value=float(ss.pre_look_time),
+                    min_value=0.0,
+                    max_value=60.0,
+                    key="pre_look_time",
+                )
+
+        with st.expander("Annotation Summary", expanded=True):
+            if ss.annotation_df is not None:
+                st.progress(
+                    ss.annotation_df["annotation"].notna().sum() / len(ss.annotation_df)
+                )
+                st.write(
+                    f"Annotated:",
+                    ss.annotation_df["annotation"].notna().sum(),
+                    "/",
+                    len(ss.annotation_df),
+                )
+                text = []
+                for label in option_labels.values():
+                    if label is None:
+                        continue
+                    count = (ss.annotation_df["annotation"] == label).sum()
+                    text.extend([label, ": ", count, " "])
+                st.write(*text)
+
+            else:
+                st.write("No annotations loaded.")
+
+        with st.expander("Filter by Annotation", expanded=True):
+            # filter by label
+            with st.form("filter_form"):
+                ss.visible_labels = st.multiselect(
+                    "Visible Labels",
+                    options=option_labels.values(),
+                    default=ss.visible_labels,
+                    help="Only show clips with these annotations",
+                )
+                st.form_submit_button("Apply Filter", type="primary")
