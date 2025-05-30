@@ -14,11 +14,20 @@ from streamlit_shortcuts import button, add_keyboard_shortcuts
 st.set_page_config(layout="wide")
 
 
-# TODO: click img to play, instead of separate audio widget
+# TODO: click img to play, instead of separate audio widget. Right click for download
 # TODO: spacebar plays active clip!
-# TODO: comment  field for each image
-# TODO: field for multi-select of species: user picks species list file, field updates 'labels' column
+# TODO: comment  field for each image. Check box in Settings to show/hide comment field
+# TODO: field for multi-select of species: user picks species list file, field updates 'labels' column. Two modes: binary classification and multi-select. "labels" column of annotation df is comma-separated list of classes.
 # TODO: click to select active pane (make reusable click-able element class?)
+# TODO: auto-save
+# TODO: move to next active clip after setting label (even if clicking on the label button)
+# TODO: when setting bold label on clip, make sure the div doesn't increase in size. This causes mis-alignment of clip panes
+# TODO: decrease latency of activating next clip after setting label
+# TODO: save/load configuration settings to yml
+# TODO: add hints for db range: too white -> decrease values, too dark -> increase values; increase contrast -> use narrower range
+# TODO: bug causing crash, no error message just Error code: 5 on chrome. Not on a consistent clip.
+# TODO: bug: if filters lead to no clips displayed, all controls disappear and you can't change the filters
+# TODO: histograms of scores for selected species (ask which column has scores, open panel with alpha=0.5 histograms of scores for positive and negative annotations)
 
 ss = st.session_state
 if not "annotation_df" in ss:
@@ -425,6 +434,7 @@ elif not check_first_path():
         """
     )
 else:
+    currently_annotating = True
     ss.annotation_df["annotation"].unique()
     filtered_annotation_df = ss.annotation_df[
         ss.annotation_df["annotation"].isin(ss.visible_labels)
@@ -432,9 +442,8 @@ else:
 
     if len(filtered_annotation_df) == 0:
         st.write("No annotations to display with the selected filters.")
-
+        n_pages = None
     else:
-        currently_annotating = True
         ss.page_indices, n_pages = paginator(
             filtered_annotation_df.index,
             items_per_page=ss.n_samples_per_page,
@@ -461,7 +470,6 @@ else:
                     active=idx == ss["active_idx"],
                 )
 
-# TODO: histograms of scores for selected species
 
 if currently_annotating:
     with st.sidebar:
