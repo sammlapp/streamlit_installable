@@ -35,7 +35,7 @@ jobs:
     - name: Build executable
       shell: bash
       run: |
-        streamlit-desktop-app build binary_classification_review.py --name AudioClipReviewer --pyinstaller-options --onefile --noconfirm --recursive-copy-metadata streamlit-extras
+        streamlit-desktop-app build binary_classification_review.py --name AudioClipReviewer --pyinstaller-options --onefile --noconfirm --recursive-copy-metadata streamlit-extras --recursive-copy-metadata plotly
 
       working-directory: ./
 
