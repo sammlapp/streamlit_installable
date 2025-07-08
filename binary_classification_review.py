@@ -1,15 +1,27 @@
 from pathlib import Path
+import librosa
 import streamlit as st
 import filedialpy
-from opensoundscape import Audio, Spectrogram
 import numpy as np
 import pandas as pd
 import streamlit as st
-from pagination import paginator, next_page, previous_page, next_idx, previous_idx
-
+import pagination  # import paginator, next_page, previous_page, next_idx, previous_idx
+import PIL
 import streamlit as st
 from streamlit_extras.stylable_container import stylable_container
 from streamlit_shortcuts import button, add_keyboard_shortcuts
+import scipy
+import matplotlib
+
+# add imports that will not be found by pyinstaller, causing build to fail:
+
+# anything using "from" syntax
+import streamlit_shortcuts
+import streamlit_extras
+import streamlit_extras.stylable_container
+
+# other stuff found by trial and error
+import pydantic.deprecated.decorator
 
 st.set_page_config(layout="wide")
 
@@ -19,8 +31,6 @@ st.set_page_config(layout="wide")
 # TODO: comment  field for each image. Check box in Settings to show/hide comment field
 # TODO: field for multi-select of species: user picks species list file, field updates 'labels' column. Two modes: binary classification and multi-select. "labels" column of annotation df is comma-separated list of classes.
 # TODO: click to select active pane (make reusable click-able element class?)
-# TODO: auto-save
-# TODO: move to next active clip after setting label (even if clicking on the label button)
 # TODO: when setting bold label on clip, make sure the div doesn't increase in size. This causes mis-alignment of clip panes
 # TODO: decrease latency of activating next clip after setting label
 # TODO: save/load configuration settings to yml
@@ -28,6 +38,7 @@ st.set_page_config(layout="wide")
 # TODO: bug causing crash, no error message just Error code: 5 on chrome. Not on a consistent clip.
 # TODO: bug: if filters lead to no clips displayed, all controls disappear and you can't change the filters
 # TODO: histograms of scores for selected species (ask which column has scores, open panel with alpha=0.5 histograms of scores for positive and negative annotations)
+# TODO: truncate file names at 32 characters in display
 
 ss = st.session_state
 if not "annotation_df" in ss:
@@ -92,6 +103,9 @@ if "visible_labels" not in ss:
     # only show clips with these annotations
     ss.visible_labels = ["yes", "no", "unknown", None]
 
+if "autosave" not in ss:
+    ss.autosave = True  # automatically save annotation df when changing pages
+
 option_map = {
     0: ":material/check_circle:",
     1: ":material/cancel:",
@@ -131,6 +145,61 @@ option_colormap = {
 @st.dialog("unsaved changes")
 def unsaved_changes():
     st.write("You have unsaved changes to annotations. Save or discard them.")
+
+
+def linear_scale(array, in_range, out_range):
+    # linear scaling of array values from in_range to out_range
+    scale = (out_range[1] - out_range[0]) / (in_range[1] - in_range[0])
+    return (array - in_range[0]) * scale + out_range[0]
+
+
+def spec_to_image(spec, range=None, colormap=None, channels=3, shape=None):
+    if colormap is not None:
+        # it doesn't make sense to use a colormap with #channels != 3
+        assert (
+            channels == 3
+        ), f"Channels must be 3 to use colormap. Specified {channels}"
+
+    # rescale spec_range to [1, 0]
+    # note the low values represent silence, so a silent img would be black
+    # if plotted directly from these values.
+    array = linear_scale(spec, in_range=range, out_range=(0, 1))
+
+    # clip values to [0,1]
+    array = np.clip(array, 0, 1)
+
+    # flip up-down so that frequency increases from bottom to top
+    array = array[::-1, :]
+
+    # invert values
+    array = 1 - array
+
+    if colormap is not None:  # apply a colormap to get RGB channels
+        cm = matplotlib.pyplot.get_cmap(colormap)
+        array = cm(array)[..., :3]  # remove alpha channel (4)
+
+    # determine output height and width
+    if shape is None:  # if None, use original shape
+        shape = np.shape(array)
+    else:  # shape is like [height, width]
+        # if height or width are None, use original sizes
+        if shape[0] is None:
+            shape[0] = np.shape(array)[0]
+        if shape[1] is None:
+            shape[1] = np.shape(array)[1]
+
+    if array.shape[-1] == 1:
+        # PIL doesnt like [x,y,1] shape, it wants [x,y] instead
+        # if there's only one channel
+        array = array[:, :, 0]
+
+    # expected shape of input is [height, width, channels]
+    image = PIL.Image.fromarray(np.uint8(array * 255))
+
+    # reshape
+    image = image.resize((shape[1], shape[0]))  # PIL expects (width, height) for resize
+
+    return image
 
 
 def load_annotation_df(f=None, discard_changes=False):
@@ -177,6 +246,12 @@ def save_annotation_df(saveas=False):
     ss.labels_are_up_to_date = True
 
 
+def autosave_annotation_df():
+    """Automatically save the annotation dataframe to the original path if it exists."""
+    if ss.autosave:
+        save_annotation_df()
+
+
 def next_unlabeled_idx(idx):
     """activate next item that doesn't have an annotation"""
 
@@ -195,10 +270,10 @@ def next_unlabeled_idx(idx):
     ss.active_idx = ss.page_indices[position]
 
 
-def update_annotation(review_id):
+def update_annotation_from_segcon(review_id):
     df_idx = int(review_id.replace("review_clip_", ""))
-    ss.annotation_df.at[df_idx, "annotation"] = option_labels[ss[review_id]]
-    ss.labels_are_up_to_date = False
+    val = option_labels[ss[review_id]]
+    set_label(df_idx, val)
 
 
 # @st.cache_data(max_entries=30)
@@ -234,92 +309,89 @@ def show_audio(file, start, end, review_buttons=False, review_id=None, active=Fa
             # st.markdown("This is a container with a border.")
             # (border=border, key="c" + review_id):
             # cache for performance # didn't work smoothly because of pickling
-            a = Audio.from_file(file, offset=start, duration=end - start)
-            spec = Spectrogram.from_audio(a, window_samples=ss.spec_window_size)
+            samples, sr = librosa.load(
+                file, sr=None, offset=start, duration=end - start
+            )
+            # create spec with librosa
+            frequencies, times, spectrogram = scipy.signal.spectrogram(
+                x=samples,
+                fs=sr,
+                # window=window_type,
+                nperseg=int(ss.spec_window_size),
+                noverlap=int(ss.spec_window_size * 0.5),  # 50% overlap
+                nfft=int(ss.spec_window_size),
+                # scaling=scaling,
+                # **kwargs,
+            )
+
+            # convert to decibels
+            # -> avoid RuntimeWarning by setting negative or 0 values to -np.inf
+            spectrogram = 10 * np.log10(
+                spectrogram,
+                where=spectrogram > 0,
+                out=np.full(spectrogram.shape, -np.inf),
+            )
             st.audio(
-                a.samples,
-                sample_rate=a.sample_rate,
+                samples,
+                sample_rate=sr,
                 format="audio/wav",
                 start_time=0,
             )
 
             if ss.use_bandpass:
-                spec = spec.bandpass(*ss.bandpass_range)
+                lowest_index = np.abs(frequencies - ss.bandpass_range[0]).argmin()
+                highest_index = np.abs(frequencies - ss.bandpass_range[1]).argmin()
 
-            c = 1 if ss.spectrogram_colormap == "greys" else 3
-            img = spec.to_image(
+                # retain slices of the spectrogram and frequencies that fall within desired range
+                spectrogram = spectrogram[lowest_index : highest_index + 1, :]
+                frequencies = frequencies[lowest_index : highest_index + 1]
+
+            img = spec_to_image(
+                spectrogram,
                 range=ss.dB_range,
-                invert=True,
                 colormap=(
                     ss.spectrogram_colormap
                     if ss.spectrogram_colormap != "greys"
                     else None
                 ),
-                channels=c,
+                channels=1 if ss.spectrogram_colormap == "greys" else 3,
+                shape=(ss.image_height, ss.image_width) if ss.resize_images else None,
             )
 
-            if ss.resize_images:
-                img = img.resize((ss.image_width, ss.image_height))
             st.image(img)
 
             if review_buttons:
+                filename = Path(file).name
+                max_len = 140 // ss.n_columns
+                if len(filename) > max_len:
+                    # truncate long file names for display
+                    filename = filename[:max_len] + "..."
                 st.segmented_control(
-                    f"`{Path(file).name}`",
+                    f"`{filename}`",  # truncate long file names
                     options=option_map.keys(),
                     format_func=lambda option: option_map[option],
                     selection_mode="single",
                     key=review_id,
-                    on_change=update_annotation,
+                    on_change=update_annotation_from_segcon,
                     args=(review_id,),
                     default=initial_value,
                 )
 
-
-# from streamlit_option_menu import option_menu
-
-# if not review_id in ss:
-#     ss[review_id] = label  # option_labels[initial_value]
-# color = option_colormap[ss[review_id]]
-# color
-# option_menu(
-#     menu_title=None,  # No title
-#     options=["yes", "no", "unknown", "no-selection"],
-#     icons=[
-#         "check2-circle",
-#         "x-circle",
-#         "question-circle",
-#         # no selection:
-#         "arrow-counterclockwise",
-#     ],  # Bootstrap icons https://www.tutorialrepublic.com/bootstrap-icons-classes.php
-#     menu_icon="cast",
-#     default_index=initial_value if initial_value is not None else 3,
-#     orientation="horizontal",
-#     styles={
-#         "container": {
-#             "padding": "0!important",
-#             "background-color": "#fafafa",
-#         },
-#         "icon": {"color": "black", "font-size": "14px"},
-#         "nav-link": {
-#             "font-size": "8px",
-#             "text-align": "center",
-#             "margin": "2px",
-#             "--hover-color": "#eee",
-#         },
-#         "nav-link-selected": {
-#             "background-color": color,
-#             "color": "black",
-#         },
-#     },
-#     key=review_id,
-#     on_change=update_annotation,
-# )
-# st.rerun()
-# ss[review_id] = val
+                # vertical space
+                st.write("")  # add vertical space after segmented control
 
 
 def update_page_annotations(indices, val):
     indices = list(indices)
+    # warn if all annotated and full_page_overrides is False
+    if not ss.full_page_overrides and all(
+        ss.annotation_df.at[idx, "annotation"] is not None for idx in indices
+    ):
+        st.warning(
+            "All clips on this page are already annotated. "
+            "Check 'Override existing annotations' to apply the annotations to annotated clips."
+        )
+        return
     for idx in indices:
         if ss.full_page_overrides or ss.annotation_df.at[idx, "annotation"] is None:
             # only update if the clip has not yet been annotated, or if override is True
@@ -337,71 +409,89 @@ def clear_audio_dir():
 
 
 def set_label(idx, label):
-    """Set the label for the current active index."""
+    """Set the label for the current active index
+
+    Then activate the next clip that has not been annotated yet
+    and update the session state to indicate that labels are not up to date.
+    """
     ss.annotation_df.at[idx, "annotation"] = label
     next_unlabeled_idx(idx)  # activate next clip after updating annotation
     ss.labels_are_up_to_date = False
 
 
 with st.sidebar:
+
     if ss.labels_are_up_to_date:
         st.success("All updates are saved")
     else:
         st.warning("Unsaved changes! use Save/Save As")
 
-    cols = st.columns(3)
-    with cols[0]:
-        button(
-            label=":material/folder_open: Open",
-            key="load_annotation_table",
-            shortcut="meta+o",
-            # hint=True,
-            on_click=load_annotation_df,
-            help="Open annotations from a CSV file with columns: 'file', 'start_time', 'annotation'",
+    with st.expander("Annotation File", expanded=True):
+        st.checkbox(
+            "Autosave annotations",
+            key="autosave",
+            # value=ss.autosave,
+            help="Automatically save annotations each time the page is changed.",
         )
-    with cols[1]:
-        button(
-            label=":material/save: Save",
-            shortcut="meta+s",
-            help="Save updates to the current annotation table",
-            key="save_annotation_table",
-            on_click=save_annotation_df,
-            # hint=True,
-        )
-    with cols[2]:
-        button(
-            label=":material/save_as: Save As",
-            shortcut="meta+ctrl+s",
-            help="Save updates to a new file",
-            key="save_annotation_table_as",
-            on_click=save_annotation_df,
-            args=(True,),
-            # hint=True,
-        )
-    st.button(
-        type="secondary",
-        label=":material/delete: Discard Unsaved Annotations",
-        key="discard_annotation_table",
-        on_click=load_annotation_df,
-        args=(ss.original_annotation_path, True),
-    )
-    st.caption(
-        f"size of annotation df: {ss.annotation_df.shape if ss.annotation_df is not None else 'n/a'}"
-    )
 
-    cols = st.columns(2)
-    with cols[0]:
-        st.button(
-            ":material/folder: Root Audio Directory",
-            key="root_audio_directory",
-            on_click=select_audio_dir,
-            help=f"{ss.audio_dir if ss.audio_dir is not None else 'n/a'}",
-        )
-    with cols[1]:
-        st.button(
-            "Clear",
-            key="clear_root_audio_directory",
-            on_click=clear_audio_dir,
+        cols = st.columns(2)
+        with cols[0]:
+            button(
+                label=":material/folder_open: Open",
+                key="load_annotation_table",
+                shortcut="meta+o",
+                # hint=True,
+                on_click=load_annotation_df,
+                help="Open annotations from a CSV file with columns: 'file', 'start_time', 'annotation'",
+            )
+        with cols[1]:
+            button(
+                label=":material/save: Save",
+                shortcut="meta+s",
+                help="Save updates to the current annotation table",
+                key="save_annotation_table",
+                on_click=save_annotation_df,
+                # hint=True,
+            )
+        cols = st.columns(2)
+        with cols[0]:
+            button(
+                label=":material/save_as: Save As",
+                shortcut="meta+ctrl+s",
+                help="Save updates to a new file",
+                key="save_annotation_table_as",
+                on_click=save_annotation_df,
+                args=(True,),
+                # hint=True,
+            )
+        with cols[1]:
+            st.button(
+                type="secondary",
+                label=":material/delete: Discard",
+                key="discard_annotation_table",
+                on_click=load_annotation_df,
+                help="Discard unsaved changes and reload the last saved annotation table.",
+                args=(ss.original_annotation_path, True),
+            )
+
+        cols = st.columns(2)
+        with cols[0]:
+            st.button(
+                ":material/folder: Audio Dir",
+                key="root_audio_directory",
+                on_click=select_audio_dir,
+                help=f"{ss.audio_dir if ss.audio_dir is not None else 'n/a'}",
+            )
+        with cols[1]:
+            st.button(
+                "Clear",
+                key="clear_root_audio_directory",
+                help="Clear the Root Audio Directory path.",
+                on_click=clear_audio_dir,
+            )
+
+        st.caption(
+            f"size of annotation df: {ss.annotation_df.shape if ss.annotation_df is not None else 'n/a'}"
         )
 
 
@@ -444,7 +534,7 @@ else:
         st.write("No annotations to display with the selected filters.")
         n_pages = None
     else:
-        ss.page_indices, n_pages = paginator(
+        ss.page_indices, n_pages = pagination.paginator(
             filtered_annotation_df.index,
             items_per_page=ss.n_samples_per_page,
         )
@@ -471,20 +561,34 @@ else:
                 )
 
 
+def previous_page(n_pages):
+    autosave_annotation_df()
+    pagination.previous_page(n_pages)
+
+
+def next_page(n_pages):
+    autosave_annotation_df()
+    pagination.next_page(n_pages)
+
+
 if currently_annotating:
+    # add navigation, display, and annotation controls to sidebar
     with st.sidebar:
         if n_pages is not None:
-            # Display a pagination selectbox in the specified location.
+
+            # Page select dropdown
             page_format_func = lambda i: "Page %s" % i
             st.selectbox(
                 "Page",
                 range(n_pages),
                 format_func=page_format_func,
                 key="page_number",
+                on_change=autosave_annotation_df,
             )
+
+            # next/previous item and page buttons
             cols = st.columns(4)
             with cols[0]:
-                # next/previous item buttons
                 button(
                     ":material/keyboard_double_arrow_left:",
                     shortcut="p",
@@ -511,7 +615,7 @@ if currently_annotating:
                     ":material/arrow_left:",
                     shortcut="j",
                     key="previous_idx",
-                    on_click=previous_idx,
+                    on_click=pagination.previous_idx,
                     hint=True,
                     help="Activate previous clip",
                 )
@@ -521,11 +625,12 @@ if currently_annotating:
                     ":material/arrow_right:",
                     "k",
                     key="next_idx",
-                    on_click=next_idx,
+                    on_click=pagination.next_idx,
                     hint=True,
                     help="Activate next clip",
                 )
 
+        # add buttons and keyboard shortcuts for full-page annotations
         with st.expander("Full-page annotations", expanded=True):
             # add_keyboard_shortcuts({"ctrl+shift+s": "Save", "ctrl+shift+o": "Open"})
             cols = st.columns(4)
@@ -578,8 +683,8 @@ if currently_annotating:
                 Otherwise, the annotation is only applied to un-labeled clips on this page.""",
             )
 
+        # add buttons and keyboard shortcuts for annotation of the active clip
         with st.expander("Selected Clip annotation", expanded=True):
-            # add keyboard shortcuts for annotation
             cols = st.columns(4)
             with cols[0]:
                 button(
@@ -622,19 +727,22 @@ if currently_annotating:
                     hint=True,
                 )
 
+        # add controls for audio and spectrogram display options
         with st.expander(":material/Settings: Settings", expanded=True):
             with st.form("settings_form"):
-                st.form_submit_button("Update")
+                st.form_submit_button("Apply Settings", type="primary")
 
                 st.write("Spectrogram settings")
-                st.checkbox("Limit Spectrogram Frequency Range", key="use_bandpass")
+                bandpass_enabled = st.checkbox(
+                    "Limit Spectrogram Frequency Range", key="use_bandpass"
+                )
                 st.slider(
                     "Bandpass filter range (Hz)",
                     min_value=0,
                     max_value=20000,
                     value=(0, 20000),
                     step=10,
-                    # disabled=not ss.use_bandpass,
+                    disabled=not bandpass_enabled,
                     key="bandpass_range",
                 )
 
@@ -717,6 +825,7 @@ if currently_annotating:
                     key="pre_look_time",
                 )
 
+        # Show count of each annotation type
         with st.expander("Annotation Summary", expanded=True):
             if ss.annotation_df is not None:
                 st.progress(
@@ -739,6 +848,7 @@ if currently_annotating:
             else:
                 st.write("No annotations loaded.")
 
+        # Filter displayed clips by current annotation
         with st.expander("Filter by Annotation", expanded=True):
             # filter by label
             with st.form("filter_form"):

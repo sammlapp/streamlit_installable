@@ -1,5 +1,12 @@
 streamlit-shortcuts>=0.2.0
 streamlit
 filedialpy
-opensoundscape
+# opensoundscape
 streamlit-extras
+soundfile
+matplotlib
+librosa
+numpy
+pandas
+Pillow
+scipy

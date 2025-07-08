@@ -1,5 +1,14 @@
-SITE_PACKAGES=$(python -c "import wandb, os; print(os.path.dirname(wandb.__file__))")
-streamlit-desktop-app build bmz_inference_gui.py --name BMZInferenceGUI --pyinstaller-options --onefile --noconfirm --add-data "${SITE_PACKAGES}/vendor:wandb/vendor"
+# build inference GUI app
+# SITE_PACKAGES=$(python -c "import wandb, os; print(os.path.dirname(wandb.__file__))")
+# streamlit-desktop-app build bmz_inference_gui.py --name BMZInferenceGUI --pyinstaller-options --onefile --noconfirm --add-data "${SITE_PACKAGES}/vendor:wandb/vendor"
+
+# for building annotation app
+# SITE_PACKAGES=$(python -c "import wandb, os; print(os.path.dirname(wandb.__file__))")
+streamlit-desktop-app build binary_classification_review.py --name AudioClipReviewer --pyinstaller-options --onefile --noconfirm --recursive-copy-metadata streamlit-extras
+# TODO: packaged app is not using theme from config.toml
+
+#--add-data "${SITE_PACKAGES}/vendor:wandb/vendor"
+
 
 # building dmg for mac: this helps user install in Applications folder with click-and-drag
 # mkdir -p MyApp_DMG
