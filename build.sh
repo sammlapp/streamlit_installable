@@ -4,9 +4,9 @@
 
 # for building annotation app
 # SITE_PACKAGES=$(python -c "import wandb, os; print(os.path.dirname(wandb.__file__))")
-streamlit-desktop-app build binary_classification_review.py --name AudioClipReviewer --pyinstaller-options --onefile --noconfirm --recursive-copy-metadata streamlit-extras
+streamlit-desktop-app build binary_classification_review.py --name AudioClipReviewer --pyinstaller-options --onefile --noconfirm --recursive-copy-metadata streamlit-extras --recursive-copy-metadata plotly
 # TODO: packaged app is not using theme from config.toml
-
+# Error: 
 #--add-data "${SITE_PACKAGES}/vendor:wandb/vendor"
 
 
