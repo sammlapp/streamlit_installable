@@ -35,7 +35,12 @@ jobs:
     - name: Build executable
       shell: bash
       run: |
-        streamlit-desktop-app build binary_classification_review.py --name AudioClipReviewer --pyinstaller-options --onefile --noconfirm --recursive-copy-metadata streamlit-extras --recursive-copy-metadata plotly
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          cmd //c build_windows.bat
+        else
+          chmod +x build_unix.sh
+          ./build_unix.sh
+        fi
 
       working-directory: ./
 
