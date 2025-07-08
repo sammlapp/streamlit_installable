@@ -19,6 +19,7 @@ import matplotlib
 import streamlit_shortcuts
 import streamlit_extras
 import streamlit_extras.stylable_container
+import plotly
 
 # other stuff found by trial and error
 import pydantic.deprecated.decorator
