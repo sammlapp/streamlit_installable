@@ -9,9 +9,13 @@ import pagination  # import paginator, next_page, previous_page, next_idx, previ
 import PIL
 import streamlit as st
 from streamlit_extras.stylable_container import stylable_container
-from streamlit_shortcuts import button, add_keyboard_shortcuts
+import streamlit_shortcuts
+
+# from streamlit_shortcuts import button, add_keyboard_shortcuts
 import scipy
 import matplotlib
+import json
+
 
 # add imports that will not be found by pyinstaller, causing build to fail:
 
@@ -21,44 +25,145 @@ import streamlit_extras
 import streamlit_extras.stylable_container
 import plotly
 
+import matplotlib.pyplot
+
 # other stuff found by trial and error
 import pydantic.deprecated.decorator
 
 st.set_page_config(layout="wide")
 
 
+def button(
+    label,
+    shortcut,
+    on_click=None,
+    key=None,
+    hint=False,
+    help=None,
+    args=None,
+    kwargs=None,
+):
+    """Wrapper for streamlit_shortcuts.button to add keyboard shortcuts only if comments are not enabled"""
+    if ss.settings["show_comment_field"]:  # regular button without shortcut
+        return st.button(
+            label=label,
+            key=key,
+            on_click=on_click,
+            help=help,
+            args=args,
+            kwargs=kwargs,
+        )
+    else:
+        return streamlit_shortcuts.button(
+            label=label,
+            key=key,
+            shortcut=shortcut,
+            on_click=on_click,
+            help=help,
+            hint=hint,
+            args=args,
+            kwargs=kwargs,
+        )
+
+
+# Default settings configuration
+DEFAULT_SETTINGS = {
+    "n_columns": 4,
+    "n_samples_per_page": 12,
+    "clip_duration": 3,
+    "pre_look_time": 0,
+    "bandpass_range": [0, 10000],
+    "dB_range": [-80, -20],
+    "spec_window_size": 512,
+    "use_bandpass": None,
+    "spectrogram_colormap": "greys",
+    "image_width": 400,
+    "image_height": 200,
+    "resize_images": False,
+    "autosave": True,
+    "show_comment_field": False,
+    "show_reference_frequency": False,
+    "reference_frequency": 2000,  # Hz
+}
+
+
+def save_settings_to_file():
+    """Save current settings to a JSON file"""
+    if "settings" not in ss:
+        return
+
+    save_path = filedialpy.saveFile(
+        title="Save Settings Configuration",
+        initial_file="config.json",
+    )
+
+    if save_path:
+        with open(save_path, "w") as f:
+            json.dump(ss.settings, f, indent=2)
+        st.success(f"Settings saved to {save_path}")
+
+
+def load_settings_from_file():
+    """Load settings from a JSON file"""
+    load_path = filedialpy.openFile(
+        title="Load Settings Configuration",
+    )
+
+    if load_path:
+        try:
+            with open(load_path, "r") as f:
+                loaded_settings = json.load(f)
+
+            # Validate loaded settings against default settings
+            validated_settings = {}
+            for key, default_value in DEFAULT_SETTINGS.items():
+                if key in loaded_settings:
+                    validated_settings[key] = loaded_settings[key]
+                else:
+                    validated_settings[key] = default_value
+
+            ss.settings = validated_settings
+            st.success(f"Settings loaded from {load_path}")
+            return True
+        except Exception as e:
+            st.error(
+                f"Error loading settings! Did you select a JSON file saved using the 'Save Settings' button?"
+            )
+            return False
+    return False
+
+
+def initialize_settings():
+    """Initialize settings in session state"""
+    if "settings" not in ss:
+        ss.settings = DEFAULT_SETTINGS.copy()
+
+    # Ensure all settings keys exist (for backwards compatibility)
+    for key, default_value in DEFAULT_SETTINGS.items():
+        if key not in ss.settings:
+            ss.settings[key] = default_value
+
+
 # TODO: click img to play, instead of separate audio widget. Right click for download
 # TODO: spacebar plays active clip!
-# TODO: comment  field for each image. Check box in Settings to show/hide comment field
 # TODO: field for multi-select of species: user picks species list file, field updates 'labels' column. Two modes: binary classification and multi-select. "labels" column of annotation df is comma-separated list of classes.
 # TODO: click to select active pane (make reusable click-able element class?)
-# TODO: when setting bold label on clip, make sure the div doesn't increase in size. This causes mis-alignment of clip panes
 # TODO: decrease latency of activating next clip after setting label
-# TODO: save/load configuration settings to yml
-# TODO: add hints for db range: too white -> decrease values, too dark -> increase values; increase contrast -> use narrower range
 # TODO: bug causing crash, no error message just Error code: 5 on chrome. Not on a consistent clip.
-# TODO: bug: if filters lead to no clips displayed, all controls disappear and you can't change the filters
 # TODO: histograms of scores for selected species (ask which column has scores, open panel with alpha=0.5 histograms of scores for positive and negative annotations)
-# TODO: truncate file names at 32 characters in display
+# TODO: frequency axis labels (turn on and off)
 
 ss = st.session_state
+
+# Initialize settings
+initialize_settings()
+
+# Initialize application state variables (not saved in config)
 if not "annotation_df" in ss:
     ss.annotation_df = None
 
 if not "active_idx" in ss:
     ss.active_idx = 0  # index of the currently selected clip
-
-if not "n_columns" in ss:
-    ss.n_columns = 4
-
-if not "n_samples_per_page" in ss:
-    ss.n_samples_per_page = 12
-
-if not "clip_duration" in ss:
-    ss.clip_duration = 3  # seconds
-
-if not "pre_look_time" in ss:
-    ss.pre_look_time = 0  # seconds
 
 if not "annotation_save_path" in ss:
     ss.annotation_save_path = None
@@ -72,40 +177,14 @@ if not "original_annotation_path" in ss:
 if not "audio_dir" in ss:
     ss.audio_dir = None
 
-if not "bandpass_range" in ss:
-    ss.bandpass_range = [0, 10000]
-
-if not "dB_range" in ss:
-    ss.dB_range = [-80, -20]  # dB range for spectrogram display
-
-if not "spec_window_size" in ss:
-    ss.spec_window_size = 512  # samples
-
-if not "use_bandpass" in ss:
-    ss.use_bandpass = None
-
-if "spectrogram_colormap" not in ss:
-    ss.spectrogram_colormap = "greys"  # default colormap for spectrograms
-
 if "page_number" not in ss:
     ss.page_number = 0
 
 if "full_page_annotation" not in ss:
     ss.full_page_annotation = None
 
-if "image_width" not in ss:
-    ss.image_width = 400
-if "image_height" not in ss:
-    ss.image_height = 200
-if "resize_images" not in ss:
-    ss.resize_images = False
-
 if "visible_labels" not in ss:
-    # only show clips with these annotations
-    ss.visible_labels = ["yes", "no", "unknown", None]
-
-if "autosave" not in ss:
-    ss.autosave = True  # automatically save annotation df when changing pages
+    ss.visible_labels = ["yes", "no", "unknown", None]  # default visible labels
 
 option_map = {
     0: ":material/check_circle:",
@@ -218,6 +297,8 @@ def load_annotation_df(f=None, discard_changes=False):
         )
         if not "annotation" in ss.annotation_df.columns:
             ss.annotation_df["annotation"] = None
+        if not "comment" in ss.annotation_df.columns:
+            ss.annotation_df["comment"] = None
 
         # change 'nan' to None in annotation column
         ss.annotation_df["annotation"] = ss.annotation_df["annotation"].replace(
@@ -241,7 +322,7 @@ def save_annotation_df(saveas=False):
         st.write("No output scores to save")
         return
     if ss.annotation_save_path is None or saveas:
-        ss.annotation_save_path = filedialpy.saveFile()
+        ss.annotation_save_path = filedialpy.saveFile(title="Save annotation table as")
     if ss.annotation_save_path:
         ss.annotation_df.to_csv(ss.annotation_save_path, index=False)
     ss.labels_are_up_to_date = True
@@ -249,7 +330,7 @@ def save_annotation_df(saveas=False):
 
 def autosave_annotation_df():
     """Automatically save the annotation dataframe to the original path if it exists."""
-    if ss.autosave:
+    if ss.settings["autosave"]:
         save_annotation_df()
 
 
@@ -281,6 +362,11 @@ def update_annotation_from_segcon(review_id):
 # def get_audio_and_spec(file, offset, duration, window_samples):
 #     a = Audio.from_file(file, offset=offset, duration=duration)
 #     return a, Spectrogram.from_audio(a, window_samples=window_samples)
+
+
+def set_comment(df_idx):
+    if f"comment_{df_idx}" in st.session_state:
+        ss.annotation_df.at[df_idx, "comment"] = st.session_state[f"comment_{df_idx}"]
 
 
 def show_audio(file, start, end, review_buttons=False, review_id=None, active=False):
@@ -318,9 +404,9 @@ def show_audio(file, start, end, review_buttons=False, review_id=None, active=Fa
                 x=samples,
                 fs=sr,
                 # window=window_type,
-                nperseg=int(ss.spec_window_size),
-                noverlap=int(ss.spec_window_size * 0.5),  # 50% overlap
-                nfft=int(ss.spec_window_size),
+                nperseg=int(ss.settings["spec_window_size"]),
+                noverlap=int(ss.settings["spec_window_size"] * 0.5),  # 50% overlap
+                nfft=int(ss.settings["spec_window_size"]),
                 # scaling=scaling,
                 # **kwargs,
             )
@@ -332,6 +418,14 @@ def show_audio(file, start, end, review_buttons=False, review_id=None, active=Fa
                 where=spectrogram > 0,
                 out=np.full(spectrogram.shape, -np.inf),
             )
+
+            # show reference frequency line if requested
+            if ss.settings["show_reference_frequency"]:
+                closest_index = np.abs(
+                    frequencies - ss.settings["reference_frequency"]
+                ).argmin()
+                # add a horizontal line at the reference frequency
+                spectrogram[closest_index, :] = ss.settings["dB_range"][1]
             st.audio(
                 samples,
                 sample_rate=sr,
@@ -339,9 +433,13 @@ def show_audio(file, start, end, review_buttons=False, review_id=None, active=Fa
                 start_time=0,
             )
 
-            if ss.use_bandpass:
-                lowest_index = np.abs(frequencies - ss.bandpass_range[0]).argmin()
-                highest_index = np.abs(frequencies - ss.bandpass_range[1]).argmin()
+            if ss.settings["use_bandpass"]:
+                lowest_index = np.abs(
+                    frequencies - ss.settings["bandpass_range"][0]
+                ).argmin()
+                highest_index = np.abs(
+                    frequencies - ss.settings["bandpass_range"][1]
+                ).argmin()
 
                 # retain slices of the spectrogram and frequencies that fall within desired range
                 spectrogram = spectrogram[lowest_index : highest_index + 1, :]
@@ -349,21 +447,25 @@ def show_audio(file, start, end, review_buttons=False, review_id=None, active=Fa
 
             img = spec_to_image(
                 spectrogram,
-                range=ss.dB_range,
+                range=ss.settings["dB_range"],
                 colormap=(
-                    ss.spectrogram_colormap
-                    if ss.spectrogram_colormap != "greys"
+                    ss.settings["spectrogram_colormap"]
+                    if ss.settings["spectrogram_colormap"] != "greys"
                     else None
                 ),
-                channels=1 if ss.spectrogram_colormap == "greys" else 3,
-                shape=(ss.image_height, ss.image_width) if ss.resize_images else None,
+                channels=1 if ss.settings["spectrogram_colormap"] == "greys" else 3,
+                shape=(
+                    (ss.settings["image_height"], ss.settings["image_width"])
+                    if ss.settings["resize_images"]
+                    else None
+                ),
             )
 
             st.image(img)
 
             if review_buttons:
                 filename = Path(file).name
-                max_len = 140 // ss.n_columns
+                max_len = 140 // ss.settings["n_columns"]
                 if len(filename) > max_len:
                     # truncate long file names for display
                     filename = filename[:max_len] + "..."
@@ -379,13 +481,30 @@ def show_audio(file, start, end, review_buttons=False, review_id=None, active=Fa
                 )
 
                 # vertical space
-                st.write("")  # add vertical space after segmented control
+                # st.write("")  # add vertical space after segmented control
+
+            if ss.settings["show_comment_field"]:
+                if review_id is not None and pd.notna(
+                    ss.annotation_df.at[df_idx, "comment"]
+                ):
+                    current_value = ss.annotation_df.at[df_idx, "comment"]
+                else:
+                    current_value = ""
+
+                st.text_area(
+                    "Comment",
+                    value=current_value,
+                    key=f"comment_{df_idx}",
+                    # height=100,
+                    on_change=set_comment(df_idx),
+                )
+            st.write("")
 
 
 def update_page_annotations(indices, val):
     indices = list(indices)
-    # warn if all annotated and full_page_overrides is False
-    if not ss.full_page_overrides and all(
+    # warn if all clips on page are annotated and full_page_overrides is False
+    if not ss["full_page_overrides"] and all(
         ss.annotation_df.at[idx, "annotation"] is not None for idx in indices
     ):
         st.warning(
@@ -394,7 +513,7 @@ def update_page_annotations(indices, val):
         )
         return
     for idx in indices:
-        if ss.full_page_overrides or ss.annotation_df.at[idx, "annotation"] is None:
+        if ss["full_page_overrides"] or ss.annotation_df.at[idx, "annotation"] is None:
             # only update if the clip has not yet been annotated, or if override is True
             ss.annotation_df.at[idx, "annotation"] = val
             ss[f"review_clip_{idx}"] = label_to_index[val]  # stored as 0, 1, 2, or None
@@ -428,13 +547,6 @@ with st.sidebar:
         st.warning("Unsaved changes! use Save/Save As")
 
     with st.expander("Annotation File", expanded=True):
-        st.checkbox(
-            "Autosave annotations",
-            key="autosave",
-            # value=ss.autosave,
-            help="Automatically save annotations each time the page is changed.",
-        )
-
         cols = st.columns(2)
         with cols[0]:
             button(
@@ -528,7 +640,7 @@ else:
     currently_annotating = True
     ss.annotation_df["annotation"].unique()
     filtered_annotation_df = ss.annotation_df[
-        ss.annotation_df["annotation"].isin(ss.visible_labels)
+        ss.annotation_df["annotation"].isin(ss["visible_labels"])
     ]
 
     if len(filtered_annotation_df) == 0:
@@ -537,25 +649,25 @@ else:
     else:
         ss.page_indices, n_pages = pagination.paginator(
             filtered_annotation_df.index,
-            items_per_page=ss.n_samples_per_page,
+            items_per_page=ss.settings["n_samples_per_page"],
         )
         if not ss["active_idx"] in ss.page_indices:
             ss["active_idx"] = ss.page_indices[0]
 
         # st.divider()
 
-        columns = st.columns(ss.n_columns)
+        columns = st.columns(ss.settings["n_columns"])
         for ii, idx in enumerate(ss.page_indices):
             row_to_display = ss.annotation_df.loc[idx]
             audio_path = row_to_display["file"]
             if ss.audio_dir is not None:
                 audio_path = Path(ss.audio_dir) / audio_path
-            with columns[ii % ss.n_columns]:
-                start_t = row_to_display["start_time"] - ss.pre_look_time
+            with columns[ii % ss.settings["n_columns"]]:
+                start_t = row_to_display["start_time"] - ss.settings["pre_look_time"]
                 show_audio(
                     audio_path,
                     start_t,
-                    start_t + ss.clip_duration,
+                    start_t + ss.settings["clip_duration"],
                     review_buttons=True,
                     review_id=f"review_clip_{idx}",
                     active=idx == ss["active_idx"],
@@ -730,18 +842,66 @@ if currently_annotating:
 
         # add controls for audio and spectrogram display options
         with st.expander(":material/Settings: Settings", expanded=True):
+            # Save/Load configuration buttons
+            cols = st.columns(3)
+            with cols[0]:
+                st.button(
+                    ":material/save: Save",
+                    key="save_config",
+                    on_click=save_settings_to_file,
+                    help="Save current display settings to a JSON file",
+                )
+            with cols[1]:
+                if st.button(
+                    ":material/folder_open: Load",
+                    key="load_config",
+                    help="Load display settings from a JSON file",
+                ):
+                    if load_settings_from_file():
+                        st.rerun()
+
+            with cols[2]:
+                if st.button(
+                    ":material/refresh: Reset",
+                    key="reset_config",
+                    help="Reset all settings to defaults",
+                ):
+                    ss.settings = DEFAULT_SETTINGS.copy()
+                    st.rerun()
+
             with st.form("settings_form"):
-                st.form_submit_button("Apply Settings", type="primary")
+                if st.form_submit_button("Apply Settings", type="primary"):
+                    # Update settings from form values
+                    for key in DEFAULT_SETTINGS.keys():
+                        if key in st.session_state:
+                            ss.settings[key] = ss[key]
+                    st.rerun()
+
+                st.write("General settings")
+                st.checkbox(
+                    "Autosave annotations",
+                    key="autosave",
+                    value=ss.settings["autosave"],
+                    help="Automatically save annotations each time the page is changed.",
+                )
+                st.checkbox(
+                    "Show comment field",
+                    key="show_comment_field",
+                    value=ss.settings["show_comment_field"],
+                    help="Show a comment field for each clip.",
+                )
 
                 st.write("Spectrogram settings")
                 bandpass_enabled = st.checkbox(
-                    "Limit Spectrogram Frequency Range", key="use_bandpass"
+                    "Limit Spectrogram Frequency Range",
+                    key="use_bandpass",
+                    value=ss.settings["use_bandpass"],
                 )
                 st.slider(
                     "Bandpass filter range (Hz)",
                     min_value=0,
                     max_value=20000,
-                    value=(0, 20000),
+                    value=tuple(ss.settings["bandpass_range"]),
                     step=10,
                     disabled=not bandpass_enabled,
                     key="bandpass_range",
@@ -751,79 +911,115 @@ if currently_annotating:
                     "Spectrogram dB range",
                     min_value=-120,
                     max_value=0,
-                    value=(-80, -20),
+                    value=tuple(ss.settings["dB_range"]),
                     step=1,
-                    help="Set the dB range for the spectrogram display",
+                    help="\nhigher values -> lighter; \nnarrower range -> more contrast",
                     key="dB_range",
                 )
 
                 st.number_input(
                     "Spectrogram window samples",
-                    value=ss.spec_window_size,
+                    value=ss.settings["spec_window_size"],
                     min_value=16,
                     max_value=4096,
                     key="spec_window_size",
                 )
 
+                colormap_options = [
+                    "greys",
+                    "viridis",
+                    "plasma",
+                    "inferno",
+                    "magma",
+                    "cividis",
+                ]
+                colormap_index = (
+                    colormap_options.index(ss.settings["spectrogram_colormap"])
+                    if ss.settings["spectrogram_colormap"] in colormap_options
+                    else 0
+                )
                 st.selectbox(
                     "Spectrogram colormap",
-                    options=[
-                        "greys",
-                        "viridis",
-                        "plasma",
-                        "inferno",
-                        "magma",
-                        "cividis",
-                    ],
-                    index=0,  # default to 'viridis'
+                    options=colormap_options,
+                    index=colormap_index,
                     help="Select the colormap for the spectrogram",
                     key="spectrogram_colormap",
                 )
 
-                st.checkbox("Resize images", key="resize_images")
-                st.number_input(
-                    "Image width (px)",
-                    min_value=10,
-                    max_value=1000,
-                    key="image_width",
-                    value=ss.image_width,
+                st.checkbox(
+                    "Resize images",
+                    key="resize_images",
+                    value=ss.settings["resize_images"],
                 )
-                st.number_input(
-                    "Image height (px)",
-                    value=ss.image_height,
-                    min_value=10,
-                    max_value=1000,
-                    key="image_height",
-                )
+                cols = st.columns(2)
+                with cols[0]:
+                    st.number_input(
+                        "width (px)",
+                        min_value=10,
+                        max_value=1000,
+                        key="image_width",
+                        value=ss.settings["image_width"],
+                    )
+                with cols[1]:
+                    st.number_input(
+                        "height (px)",
+                        value=ss.settings["image_height"],
+                        min_value=10,
+                        max_value=1000,
+                        key="image_height",
+                    )
 
                 st.write("Display settings")
-                st.number_input(
-                    "number of columns",
-                    key="n_columns",
-                    min_value=1,
-                    max_value=20,
-                    value=ss.n_columns,
+                cols = st.columns(2)
+                with cols[0]:
+                    st.number_input(
+                        "columns",
+                        key="n_columns",
+                        min_value=1,
+                        max_value=20,
+                        value=ss.settings["n_columns"],
+                    )
+                with cols[1]:
+                    st.number_input(
+                        "samples / page",
+                        value=ss.settings["n_samples_per_page"],
+                        min_value=1,
+                        max_value=100,
+                        key="n_samples_per_page",
+                    )
+
+                cols = st.columns(2)
+                with cols[0]:
+                    st.number_input(
+                        "Length (sec)",
+                        value=float(ss.settings["clip_duration"]),
+                        min_value=0.1,
+                        max_value=60.0,
+                        key="clip_duration",
+                    )
+                with cols[1]:
+                    st.number_input(
+                        "Pre-look (sec)",
+                        value=float(ss.settings["pre_look_time"]),
+                        min_value=0.0,
+                        max_value=60.0,
+                        key="pre_look_time",
+                    )
+
+                st.checkbox(
+                    "Show reference frequency",
+                    key="show_reference_frequency",
+                    value=ss.settings["show_reference_frequency"],
+                    help="Show a reference frequency line on the spectrogram.",
                 )
                 st.number_input(
-                    "number of samples per page",
-                    value=ss.n_samples_per_page,
-                    min_value=1,
-                    max_value=100,
-                    key="n_samples_per_page",
-                )
-                st.number_input(
-                    "Audio clip duration (seconds)",
-                    value=float(ss.clip_duration),
-                    min_value=0.1,
-                    max_value=60.0,
-                    key="clip_duration",
-                )
-                st.number_input(
-                    "Pre-look time (seconds)",
-                    value=float(ss.pre_look_time),
-                    min_value=0.0,
-                    max_value=60.0,
-                    key="pre_look_time",
+                    "Reference frequency (Hz)",
+                    value=int(ss.settings["reference_frequency"]),
+                    min_value=int(0),
+                    max_value=int(20000),
+                    key="reference_frequency",
+                    disabled=not ss.settings["show_reference_frequency"],
+                    help="Frequency to show as a reference line on the spectrogram.",
                 )
 
         # Show count of each annotation type
@@ -853,10 +1049,11 @@ if currently_annotating:
         with st.expander("Filter by Annotation", expanded=True):
             # filter by label
             with st.form("filter_form"):
-                ss.visible_labels = st.multiselect(
+                st.multiselect(
                     "Visible Labels",
                     options=option_labels.values(),
-                    default=ss.visible_labels,
+                    default=ss["visible_labels"],
                     help="Only show clips with these annotations",
+                    key="visible_labels",
                 )
                 st.form_submit_button("Apply Filter", type="primary")
