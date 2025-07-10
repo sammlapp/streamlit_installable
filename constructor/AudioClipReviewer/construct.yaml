@@ -1,0 +1,38 @@
+name: AudioClipReviewer
+version: 1.0
+
+# Use environment file for dependencies
+environment_file: ./environment.yml
+
+# Include the main application files
+extra_files:
+  - ../../binary_classification_review.py
+  - ../../pagination.py
+  - ../../launch_audioclipreviewer.py
+  - ../../.streamlit/config.toml
+
+# Post-install script to create shortcuts
+post_install: post_install.py
+
+# Installer configuration
+# installer_filename: AudioClipReviewer-{{ version }}-{{ platform }}.{{ ext }}
+
+# Welcome message shown during installation
+# welcome_image: # optional: path to welcome image
+welcome_text: |
+  Welcome to AudioClipReviewer!
+  
+  This tool helps you annotate audio clips for machine learning research.
+  
+  After installation, launch AudioClipReviewer from your Start Menu (Windows) 
+  or Applications folder (macOS).
+
+# License information
+# license_file: # optional: path to license file
+
+# Add desktop shortcuts and menu entries
+menu_packages:
+  - AudioClipReviewer
+
+# Platform-specific settings
+# reverse_domain_identifier: com.audioclipreviewer.app
