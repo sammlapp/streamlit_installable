@@ -11,8 +11,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ['windows-latest', 'ubuntu-latest', 'macos-latest']
-        app: ['audioclipreviewer'] # 'bmzinferencegui']
+        include:
+          # Windows x64
+          - os: windows-latest
+            app: audioclipreviewer
+            arch: x64
+          # Linux x64  
+          - os: ubuntu-latest
+            app: audioclipreviewer
+            arch: x64
+          # macOS Intel (x86_64)
+          - os: macos-13
+            app: audioclipreviewer
+            arch: x64
+          # macOS Apple Silicon (arm64)
+          - os: macos-14
+            app: audioclipreviewer
+            arch: arm64
 
     steps:
     - name: Checkout code
@@ -51,11 +66,18 @@ jobs:
         name: ${{ matrix.app }}-windows-installer
         path: "*.exe"
 
-    - name: Upload macOS artifacts
-      if: matrix.os == 'macos-latest'
+    - name: Upload macOS Intel artifacts
+      if: matrix.os == 'macos-13'
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.app }}-macos-installer
+        name: ${{ matrix.app }}-macos-intel-installer
+        path: "*MacOSX*.sh"
+        
+    - name: Upload macOS Apple Silicon artifacts
+      if: matrix.os == 'macos-14'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.app }}-macos-arm64-installer
         path: "*MacOSX*.sh"
 
     - name: Upload Linux artifacts
