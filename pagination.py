@@ -21,9 +21,6 @@ def previous_page(n_pages):
     st.session_state["page_number"] = (st.session_state["page_number"] - 1) % n_pages
 
 
-from streamlit_shortcuts import button, add_keyboard_shortcuts
-
-
 def next_idx():
     """activate next item
 

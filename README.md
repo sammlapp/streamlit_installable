@@ -24,7 +24,25 @@ streamlit run binary_classification_review.py
 opens a web browser where you can annotate audio clips
 
 ### Installing desktop programs
-Not available yet
+
+**Desktop installers are available for Windows, macOS, and Linux:**
+
+1. **Download the installer** for your platform from the [Releases](../../releases) page:
+   - Windows: `AudioClipReviewer-1.0-Windows-x86_64.exe` or `BMZInferenceGUI-1.0-Windows-x86_64.exe`
+   - macOS: `AudioClipReviewer-1.0-MacOSX-x86_64.pkg` or `BMZInferenceGUI-1.0-MacOSX-x86_64.pkg`
+   - Linux: `AudioClipReviewer-1.0-Linux-x86_64.sh` or `BMZInferenceGUI-1.0-Linux-x86_64.sh`
+
+2. **Run the installer**:
+   - **Windows**: Double-click the `.exe` file and follow the installation wizard
+   - **macOS**: Double-click the `.pkg` file and follow the installation wizard
+   - **Linux**: Run `bash AudioClipReviewer-1.0-Linux-x86_64.sh` (or BMZ version) in terminal
+
+3. **Launch the application**:
+   - **Windows**: Find "AudioClipReviewer" or "BMZ Inference GUI" in your Start Menu
+   - **macOS**: Find the app in your Applications folder
+   - **Linux**: Launch from Applications menu or run `audioclipreviewer` / `bmzinferencegui` in terminal
+
+**Note**: The installers are self-contained and include all necessary dependencies (Python, PyTorch, etc.). No additional setup is required.
 
 ### Usage
 To use the tool, create a .csv where `file` column contains (relative) path to audio file, `start_time` contains the amount of time from the beginning of the audio file until the clip you want to load, and `annotation` will contain the annotations "yes", "no", "unknown", or empty for un-annotated. 

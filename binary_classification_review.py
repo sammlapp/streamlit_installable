@@ -9,9 +9,9 @@ import pagination  # import paginator, next_page, previous_page, next_idx, previ
 import PIL
 import streamlit as st
 from streamlit_extras.stylable_container import stylable_container
-import streamlit_shortcuts
 
-# from streamlit_shortcuts import button, add_keyboard_shortcuts
+# import streamlit_shortcuts
+
 import scipy
 import matplotlib
 import json
@@ -26,9 +26,7 @@ import streamlit_extras.stylable_container
 import plotly
 
 import matplotlib.pyplot
-
-# other stuff found by trial and error
-import pydantic.deprecated.decorator
+import shortcut_utils
 
 st.set_page_config(layout="wide")
 
@@ -43,33 +41,23 @@ def button(
     args=None,
     kwargs=None,
 ):
-    """Wrapper for streamlit_shortcuts.button to add keyboard shortcuts only if comments are not enabled"""
-    if ss.settings["show_comment_field"]:  # regular button without shortcut
-        return st.button(
-            label=label,
-            key=key,
-            on_click=on_click,
-            help=help,
-            args=args,
-            kwargs=kwargs,
-        )
-    else:
-        return streamlit_shortcuts.button(
-            label=label,
-            key=key,
-            shortcut=shortcut,
-            on_click=on_click,
-            help=help,
-            hint=hint,
-            args=args,
-            kwargs=kwargs,
-        )
+    """Wrapper for button to add keyboard shortcut only if shortcuts are enabled"""
+    b = shortcut_utils.shortcut_button(
+        label=label,
+        shortcut=shortcut if ss.settings["enable_shortcuts"] else None,
+        key=key,
+        on_click=on_click,
+        help=help,
+        args=args,
+        kwargs=kwargs,
+    )
+    return b
 
 
 # Default settings configuration
 DEFAULT_SETTINGS = {
     "n_columns": 4,
-    "n_samples_per_page": 12,
+    "n_rows": 2,
     "clip_duration": 3,
     "pre_look_time": 0,
     "bandpass_range": [0, 10000],
@@ -84,6 +72,8 @@ DEFAULT_SETTINGS = {
     "show_comment_field": False,
     "show_reference_frequency": False,
     "reference_frequency": 2000,  # Hz
+    "show_file_name": True,
+    "enable_shortcuts": True,  # enable keyboard shortcuts
 }
 
 
@@ -464,13 +454,17 @@ def show_audio(file, start, end, review_buttons=False, review_id=None, active=Fa
             st.image(img)
 
             if review_buttons:
-                filename = Path(file).name
-                max_len = 140 // ss.settings["n_columns"]
-                if len(filename) > max_len:
-                    # truncate long file names for display
-                    filename = filename[:max_len] + "..."
+                if ss.settings["show_file_name"]:
+                    filename = Path(file).name
+                    max_len = 100 // ss.settings["n_columns"]
+                    if len(filename) > max_len:
+                        # truncate long file names for display
+                        filename = filename[:max_len] + "..."
+                    filename = f"`{filename}`"
+                else:
+                    filename = None
                 st.segmented_control(
-                    f"`{filename}`",  # truncate long file names
+                    filename,
                     options=option_map.keys(),
                     format_func=lambda option: option_map[option],
                     selection_mode="single",
@@ -578,13 +572,14 @@ with st.sidebar:
                 # hint=True,
             )
         with cols[1]:
+            table_to_load = ss.annotation_save_path or ss.original_annotation_path
             st.button(
                 type="secondary",
                 label=":material/delete: Discard",
                 key="discard_annotation_table",
                 on_click=load_annotation_df,
                 help="Discard unsaved changes and reload the last saved annotation table.",
-                args=(ss.original_annotation_path, True),
+                args=(table_to_load, True),
             )
 
         cols = st.columns(2)
@@ -649,7 +644,7 @@ else:
     else:
         ss.page_indices, n_pages = pagination.paginator(
             filtered_annotation_df.index,
-            items_per_page=ss.settings["n_samples_per_page"],
+            items_per_page=ss.settings["n_rows"] * ss.settings["n_columns"],
         )
         if not ss["active_idx"] in ss.page_indices:
             ss["active_idx"] = ss.page_indices[0]
@@ -890,7 +885,18 @@ if currently_annotating:
                     value=ss.settings["show_comment_field"],
                     help="Show a comment field for each clip.",
                 )
-
+                st.checkbox(
+                    "Show file name",
+                    key="show_file_name",
+                    value=ss.settings["show_file_name"],
+                    help="Show the file name of the audio clip above the segmented control.",
+                )
+                st.checkbox(
+                    "Enable keyboard shortcuts",
+                    key="enable_shortcuts",
+                    value=ss.settings["enable_shortcuts"],
+                    help="Enable keyboard shortcuts for navigation and annotation.",
+                )
                 st.write("Spectrogram settings")
                 bandpass_enabled = st.checkbox(
                     "Limit Spectrogram Frequency Range",
@@ -981,11 +987,11 @@ if currently_annotating:
                     )
                 with cols[1]:
                     st.number_input(
-                        "samples / page",
-                        value=ss.settings["n_samples_per_page"],
+                        "rows",
+                        value=ss.settings["n_rows"],
                         min_value=1,
                         max_value=100,
-                        key="n_samples_per_page",
+                        key="n_rows",
                     )
 
                 cols = st.columns(2)
