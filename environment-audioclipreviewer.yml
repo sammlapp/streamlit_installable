@@ -1,0 +1,23 @@
+name: audioclipreviewer
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - streamlit
+  - numpy
+  - pandas
+  - matplotlib
+  - scipy
+  - librosa
+  - pillow
+  - json5
+  - pip
+  - pip:
+    - streamlit-shortcuts>=0.2.0
+    - streamlit-extras
+    - filedialpy
+    - plotly
+    - pydantic
+    - soundfile
+    - streamlit-desktop-app

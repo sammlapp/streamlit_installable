@@ -1,0 +1,29 @@
+name: bmzinferencegui
+channels:
+  - conda-forge
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.10
+  - streamlit
+  - numpy
+  - pandas
+  - matplotlib
+  - scipy
+  - librosa
+  - soundfile
+  - pillow
+  - pytorch
+  - torchvision
+  - torchaudio
+  - json5
+  - pip
+  - pip:
+    - streamlit-shortcuts>=0.2.0
+    - streamlit-extras
+    - filedialpy
+    - bioacoustics-model-zoo
+    - wandb
+    - wandb-gql
+    - pydantic
+    - streamlit-desktop-app
