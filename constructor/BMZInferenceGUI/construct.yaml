@@ -1,0 +1,31 @@
+name: BMZInferenceGUI
+version: 1.0
+
+# Use environment file for dependencies
+environment_file: ../../environment-bmzinferencegui.yml
+
+# Include the main application files
+extra_files:
+  - ../../bmz_inference_gui.py
+  - ../../launch_bmzinferencegui.py
+  - ../../.streamlit/
+
+# Post-install script to create shortcuts
+post_install: post_install.py
+
+# Installer configuration
+installer_filename: BMZInferenceGUI-{{ version }}-{{ platform }}.{{ ext }}
+
+# Welcome message shown during installation
+welcome_text: |
+  Welcome to BMZ Inference GUI!
+  
+  This tool provides a graphical interface for running bioacoustics models
+  from the Model Zoo on your audio data.
+  
+  After installation, launch BMZ Inference GUI from your Start Menu (Windows) 
+  or Applications folder (macOS).
+
+# Add desktop shortcuts and menu entries
+menu_packages:
+  - BMZInferenceGUI
