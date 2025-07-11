@@ -13,17 +13,17 @@ jobs:
       matrix:
         include:
           # Windows x64
-          - os: windows-latest
-            app: audioclipreviewer
-            arch: x64
-          # Linux x64  
-          - os: ubuntu-latest
-            app: audioclipreviewer
-            arch: x64
-          # macOS Intel (x86_64)
-          - os: macos-13
-            app: audioclipreviewer
-            arch: x64
+          # - os: windows-latest
+          #   app: audioclipreviewer
+          #   arch: x64
+          # # Linux x64  
+          # - os: ubuntu-latest
+          #   app: audioclipreviewer
+          #   arch: x64
+          # # macOS Intel (x86_64)
+          # - os: macos-13
+          #   app: audioclipreviewer
+          #   arch: x64
           # macOS Apple Silicon (arm64)
           - os: macos-14
             app: audioclipreviewer
@@ -51,7 +51,7 @@ jobs:
         python-version: 3.11
         activate-environment: build-env
         environment-file: constructor/AudioClipReviewer/environment.yml
-        miniconda-version: latest
+        # miniconda-version: latest # instead, specify installer url
         installer-url: https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh
 
     - name: Verify Architecture and Conda Installation
