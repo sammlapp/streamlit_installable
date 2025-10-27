@@ -86,5 +86,11 @@ The annotation summary in the left panel shows a progress bar for the clips with
 - navigate between pages with p (previous) and n (next) (no modifier keys)
 - activate the previous or next clip
 
+## Known bugs
+
+If you find yourself in this situation, click Cancel on the file dialogue. If you see a big red error message, use R or cmd/ctrl+R to refresh the web page. Worst case scenario, go to the command line where you started the streamlit app, cancel it with ctrl+c, then re-start. Unsaved changes to annotations will be lost. 
+
+If you open a file selection window, then open another one before the first one is closed, things will break. 
+
 ## Bugs and feature requests
 Post bugs and feature requests to the Issues page on this repo
