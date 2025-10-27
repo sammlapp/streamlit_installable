@@ -533,6 +533,15 @@ def set_label(idx, label):
     ss.labels_are_up_to_date = False
 
 
+hide_streamlit_style = """
+<style>
+    #root > div:nth-child(1) > div > div > div > div > section > div {padding-top: 0rem;}
+</style>
+
+"""
+# remove top padding
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 with st.sidebar:
 
     if ss.labels_are_up_to_date:
@@ -650,6 +659,11 @@ else:
             ss["active_idx"] = ss.page_indices[0]
 
         # st.divider()
+
+        # show shortcuts
+        st.write(
+            f"**Page:** {ss['page_number'] + 1}/{n_pages}   **Shortcuts** `a/s/d/f`=Yes/No/Uncertain/None  `j/k`=prev/next clip  `n/p`=prev/next page `ctrl/cmd+s`=save "
+        )
 
         columns = st.columns(ss.settings["n_columns"])
         for ii, idx in enumerate(ss.page_indices):
