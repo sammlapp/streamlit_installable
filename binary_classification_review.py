@@ -20,7 +20,7 @@ import json
 # add imports that will not be found by pyinstaller, causing build to fail:
 
 # anything using "from" syntax
-import streamlit_shortcuts
+# import streamlit_shortcuts
 import streamlit_extras
 import streamlit_extras.stylable_container
 import plotly

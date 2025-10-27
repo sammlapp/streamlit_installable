@@ -1,12 +1,14 @@
-streamlit-shortcuts>=0.2.0
+streamlit-shortcuts>=0.2.0 #pip
 streamlit
-filedialpy
+filedialpy #pip
 # opensoundscape
-streamlit-extras
-soundfile
+streamlit-extras #pip
+soundfile #pip
 matplotlib
 librosa
 numpy
 pandas
 Pillow
 scipy
+streamlit-desktop-app #pip
+pydantic # pip
